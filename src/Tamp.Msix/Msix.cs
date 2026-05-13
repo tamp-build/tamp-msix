@@ -110,7 +110,16 @@ public static class Msix
         doc.Save(appxManifestPath.Value);
     }
 
-    internal static string NormalizeMsixVersion(string version)
+    /// <summary>
+    /// Normalize a 3-part SemVer (<c>1.0.6</c>) to MSIX's 4-part form (<c>1.0.6.0</c>), or pass
+    /// through a 4-part value unchanged. Useful for adopter <c>Build.cs</c> code computing the
+    /// MSIX filename from a <c>[Parameter] string Version</c>:
+    /// <code>
+    /// AbsolutePath MsixOut => Artifacts / $"DasBook_{Msix.NormalizeMsixVersion(Version)}_x64.msix";
+    /// </code>
+    /// </summary>
+    /// <exception cref="ArgumentException">If <paramref name="version"/> is empty, has fewer than 3 or more than 4 dotted components, or contains non-numeric components.</exception>
+    public static string NormalizeMsixVersion(string version)
     {
         if (string.IsNullOrWhiteSpace(version))
             throw new ArgumentException("version must not be empty.", nameof(version));

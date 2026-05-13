@@ -156,6 +156,68 @@ public sealed class MsixTests
                 .Arguments.ToList());
     }
 
+    // ─── TAM-191 — password-protected PFX (/p) ───────────────────────────
+
+    [Fact]
+    public void Sign_PFX_With_Password_Emits_P_Flag()
+    {
+        var pwd = new Secret("dasbook-pfx-pwd", "s3cret-pfx-pwd");
+        var plan = Msix.Sign(FakeSignTool(), s => s
+            .AddFile("DasBook.msix")
+            .SetCertificateFile("cert.pfx")
+            .SetPassword(pwd));
+        Assert.Equal("cert.pfx", plan.Arguments[IndexOf(plan.Arguments, "/f") + 1]);
+        Assert.Equal("s3cret-pfx-pwd", plan.Arguments[IndexOf(plan.Arguments, "/p") + 1]);
+        // The Secret flows through CommandPlan so Tamp's runner masks the value in printed traces.
+        Assert.Contains(pwd, plan.Secrets);
+    }
+
+    [Fact]
+    public void Sign_Password_Without_CertificateFile_Throws()
+    {
+        // /p only applies to /f. Store-resident cert paths (/sha1, /n) have no password slot.
+        Assert.Throws<InvalidOperationException>(() =>
+            Msix.Sign(FakeSignTool(), s => s
+                .AddFile("x.msix")
+                .SetSha1Thumbprint("ABCDEF")
+                .SetPassword(new Secret("p", "pwd"))).Arguments.ToList());
+    }
+
+    [Fact]
+    public void Sign_Password_With_SubjectName_Throws()
+    {
+        Assert.Throws<InvalidOperationException>(() =>
+            Msix.Sign(FakeSignTool(), s => s
+                .AddFile("x.msix")
+                .SetSubjectName("CN=DasBook")
+                .SetPassword(new Secret("p", "pwd"))).Arguments.ToList());
+    }
+
+    [Fact]
+    public void Sign_PFX_Without_Password_Still_Works()
+    {
+        // Unencrypted PFX should continue working — /p is opt-in.
+        var plan = Msix.Sign(FakeSignTool(), s => s
+            .AddFile("DasBook.msix")
+            .SetCertificateFile("cert.pfx"));
+        Assert.DoesNotContain("/p", plan.Arguments);
+        Assert.Empty(plan.Secrets);
+    }
+
+    [Fact]
+    public void Sign_PFX_With_Password_And_Timestamp_Combined()
+    {
+        var pwd = new Secret("pfx-pwd", "supersecret");
+        var plan = Msix.Sign(FakeSignTool(), s => s
+            .AddFile("DasBook.msix")
+            .SetCertificateFile("cert.pfx")
+            .SetPassword(pwd)
+            .SetTimestampUrl("http://timestamp.digicert.com"));
+        Assert.Equal("supersecret", plan.Arguments[IndexOf(plan.Arguments, "/p") + 1]);
+        Assert.Equal("http://timestamp.digicert.com",
+            plan.Arguments[IndexOf(plan.Arguments, "/tr") + 1]);
+    }
+
     // ---- signtool verify ----
 
     [Fact]

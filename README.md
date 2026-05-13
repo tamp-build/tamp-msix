@@ -39,7 +39,7 @@ class Build : TampBuild
 
     [Parameter] readonly string Version = "1.0.6";
 
-    [FromPath("cargo")] readonly Tool Cargo = null!;
+    [FromPath("cargo")] readonly Tool CargoBin = null!;
     [FromNodeModules("tauri")] readonly Tool TauriCli = null!;
     [FromPath("makeappx")] readonly Tool MakeAppx = null!;
     [FromPath("signtool")] readonly Tool SignTool = null!;
@@ -59,7 +59,7 @@ class Build : TampBuild
         // 1.0.6 → 1.0.6.0 automatically; no separate "bump the manifest" step lost in tribal memory.
 
     Target BuildService => _ => _
-        .Executes(() => Cargo.Build(s => s
+        .Executes(() => Cargo.Build(CargoBin, s => s
             .SetWorkingDirectory(ServiceCrate)
             .SetRelease().SetTarget(TargetTriple).SetLocked()));
 
@@ -69,7 +69,7 @@ class Build : TampBuild
         {
             var built = ServiceCrate / "target" / TargetTriple / "release" / "dasbook-service.exe";
             var sidecar = Tauri.ExternalBinPath(SrcTauri, "dasbook-service", TargetTriple);
-            sidecar.Parent!.CreateDirectory();
+            Directory.CreateDirectory(sidecar.Parent!.Value);
             File.Copy(built.Value, sidecar.Value, overwrite: true);
         });
 
@@ -129,12 +129,16 @@ class Build : TampBuild
 ```csharp
 public static string? GetAppxManifestVersion(AbsolutePath appxManifestPath);
 public static void    SetAppxManifestVersion(AbsolutePath appxManifestPath, string version);
-internal static string NormalizeMsixVersion(string version);
+public static string  NormalizeMsixVersion(string version);
 ```
 
 - `Get` returns `Identity/@Version` from the manifest, or `null` if the file or attribute is missing.
 - `Set` accepts either 3-part SemVer (`1.0.6`) or full 4-part MSIX (`1.0.6.42`); 3-part gets `.0` appended to satisfy the manifest schema. Non-numeric or oddly-shaped versions throw `ArgumentException` with a helpful message.
-- `Normalize` is exposed via `internal` for `Tamp.Core` and for tests; in build scripts use `Set` directly.
+- `Normalize` exposes the 3-part → 4-part rule directly. Adopters compute MSIX-format filenames from a `[Parameter] string Version` parameter:
+  ```csharp
+  AbsolutePath MsixOut => Artifacts / $"DasBook_{Msix.NormalizeMsixVersion(Version)}_x64.msix";
+  ```
+  (Public as of `Tamp.Msix` 0.2.0 — was `internal` in 0.1.0 per DasBook canary friction.)
 
 The whole point is to **stop having a version-bump be three separate hand edits**. Cargo's `[package].version` and `package.json`'s `version` can already be driven by build parameters; the manifest joins them.
 

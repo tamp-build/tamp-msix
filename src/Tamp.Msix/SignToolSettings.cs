@@ -9,11 +9,18 @@ namespace Tamp.Msix;
 /// <c>%ProgramFiles(x86)%\Windows Kits\10\bin\&lt;version&gt;\x64\signtool.exe</c>.
 /// </para>
 /// <para>
-/// <b>Authentication:</b> 0.1.0 supports the certificate-file path (<c>/f</c>) without a password
-/// and the cert-store thumbprint path (<c>/sha1</c>). Cert-file + password (<c>/p</c>) requires
-/// <c>Tamp.Msix</c> on <c>Tamp.Core</c>'s <c>InternalsVisibleTo</c> list to <c>Reveal()</c> the
-/// password safely — deferred to 0.2.0 (TAM-191). Adopters needing password-protected cert files
-/// today can use <see cref="SignToolRaw"/>.
+/// <b>Authentication:</b> three cert-selector paths (mutually exclusive):
+/// <list type="bullet">
+///   <item><b>Certificate file</b> (<c>/f</c>) — optionally with <see cref="Password"/> (<c>/p</c>) for password-protected PFX (TAM-191, 0.2.0+).</item>
+///   <item><b>SHA1 thumbprint</b> (<c>/sha1</c>) — for certs already in the machine store.</item>
+///   <item><b>Subject name</b> (<c>/n</c>) — for store-resident certs without a thumbprint.</item>
+/// </list>
+/// </para>
+/// <para>
+/// <b>Password handling caveat:</b> signtool reads <c>/p</c> from the command line — it does NOT support
+/// env-var-routed passwords. The value goes on the process argument table for the lifetime of the signtool
+/// process. <see cref="Password"/> is <see cref="Secret"/>-typed so it's masked in Tamp's printed
+/// <see cref="CommandPlan"/> trace, but the OS-level visibility is a signtool design limitation we can't work around.
 /// </para>
 /// </remarks>
 public sealed class SignToolSignSettings
@@ -29,6 +36,17 @@ public sealed class SignToolSignSettings
 
     /// <summary>Path to the PFX certificate file (<c>/f</c>). Mutually exclusive with <see cref="Sha1Thumbprint"/>.</summary>
     public string? CertificateFile { get; set; }
+
+    /// <summary>
+    /// Password protecting the PFX file (<c>/p</c>). Requires <see cref="CertificateFile"/> to be set.
+    /// <see cref="Secret"/>-typed so the value is masked in <see cref="CommandPlan"/> trace.
+    /// </summary>
+    /// <remarks>
+    /// signtool does NOT support env-var-routed passwords for <c>/p</c> — the value goes on the
+    /// process argument table for the lifetime of the signtool process. The <see cref="Secret"/>
+    /// wrapper keeps it out of Tamp's logs but cannot hide it from the OS process table.
+    /// </remarks>
+    public Secret? Password { get; set; }
 
     /// <summary>SHA1 thumbprint of a cert in the certificate store (<c>/sha1</c>). Mutually exclusive with <see cref="CertificateFile"/>.</summary>
     public string? Sha1Thumbprint { get; set; }
@@ -57,6 +75,7 @@ public sealed class SignToolSignSettings
     public SignToolSignSettings AddFile(string path) { Files.Add(path); return this; }
     public SignToolSignSettings AddFiles(params string[] paths) { Files.AddRange(paths); return this; }
     public SignToolSignSettings SetCertificateFile(string path) { CertificateFile = path; return this; }
+    public SignToolSignSettings SetPassword(Secret secret) { Password = secret; return this; }
     public SignToolSignSettings SetSha1Thumbprint(string thumbprint) { Sha1Thumbprint = thumbprint; return this; }
     public SignToolSignSettings SetAutoSelect(bool v = true) { AutoSelect = v; return this; }
     public SignToolSignSettings SetTimestampUrl(string url) { TimestampUrl = url; return this; }
@@ -77,10 +96,14 @@ public sealed class SignToolSignSettings
                 "signtool sign needs a certificate selector — set one of: CertificateFile (/f), Sha1Thumbprint (/sha1), or SubjectName (/n).");
         if (!string.IsNullOrEmpty(CertificateFile) && !string.IsNullOrEmpty(Sha1Thumbprint))
             throw new InvalidOperationException("CertificateFile and Sha1Thumbprint are mutually exclusive.");
+        if (Password is not null && string.IsNullOrEmpty(CertificateFile))
+            throw new InvalidOperationException(
+                "Password requires CertificateFile — signtool's /p flag only applies to /f. For store-resident certs (/sha1 or /n) the password lives in the certificate store, not on the command line.");
 
         var args = new List<string> { "sign" };
         if (AutoSelect) args.Add("/a");
         if (!string.IsNullOrEmpty(CertificateFile)) { args.Add("/f"); args.Add(CertificateFile!); }
+        if (Password is not null) { args.Add("/p"); args.Add(Password.Reveal()); }
         if (!string.IsNullOrEmpty(Sha1Thumbprint)) { args.Add("/sha1"); args.Add(Sha1Thumbprint!); }
         if (!string.IsNullOrEmpty(SubjectName)) { args.Add("/n"); args.Add(SubjectName!); }
         if (!string.IsNullOrEmpty(FileDigestAlgorithm)) { args.Add("/fd"); args.Add(FileDigestAlgorithm!); }
@@ -100,7 +123,7 @@ public sealed class SignToolSignSettings
             Arguments = args,
             Environment = new Dictionary<string, string>(EnvironmentVariables),
             WorkingDirectory = WorkingDirectory ?? tool.WorkingDirectory,
-            Secrets = Array.Empty<Secret>(),
+            Secrets = Password is null ? Array.Empty<Secret>() : new[] { Password },
         };
     }
 }

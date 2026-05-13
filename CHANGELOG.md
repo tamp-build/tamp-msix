@@ -5,6 +5,48 @@ All notable changes to **Tamp.Msix** are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] — pending — password-protected PFX signing (TAM-191) + `Msix.NormalizeMsixVersion` promoted to public
+
+### Added
+
+- **`Msix.NormalizeMsixVersion(string)`** is now `public` (was `internal` in 0.1.0).
+  Build scripts that compose MSIX filenames from a `[Parameter] string Version`
+  can call it directly. DasBook canary friction: my own README sketch promised
+  this helper as `public` but 0.1.0 shipped it `internal` so the sketch failed
+  to compile. 0.2.0 makes the helper match the docs.
+
+  ```csharp
+  AbsolutePath MsixOut => Artifacts / $"DasBook_{Msix.NormalizeMsixVersion(Version)}_x64.msix";
+  ```
+
+- **`SignToolSignSettings.SetPassword(Secret)`** — `signtool sign /f cert.pfx /p <pwd>`.
+  Pairs with `SetCertificateFile(path)` to sign with a password-protected PFX file.
+  `Secret`-typed so the value is masked in Tamp's printed `CommandPlan` trace.
+
+  **Caveat:** signtool does NOT support env-var-routed passwords for `/p` — the
+  cleartext goes on the process argument table for the lifetime of the signtool
+  process. The `Secret` wrapper keeps it out of Tamp's logs but cannot hide it
+  from the OS process table. This is a signtool design limitation we can't work
+  around; documented prominently on the type.
+
+  Validation: `Password` requires `CertificateFile` to be set. Pairing with
+  `Sha1Thumbprint` or `SubjectName` (store-resident certs) throws
+  `InvalidOperationException` — those paths don't have a password slot.
+  Unencrypted PFX continues working (Password is opt-in).
+
+Originally deferred from 0.1.0 because `Secret.Reveal()` required
+`InternalsVisibleTo` on Tamp.Core. Tamp.Core 1.6.0 made `Reveal()` public +
+TAMP004-analyzer-gated; the `SignToolSignSettings` class-name suffix is the
+canonical approved context, so no IVT entry was ever needed. The deferral
+became a no-op once 1.6.0 shipped — TAM-191 picked it up cleanly.
+
+### Tests
+
+- 5 new unit tests in `MsixTests`: password emits `/p`, Secret flows through
+  `CommandPlan.Secrets`, password without CertificateFile throws, password
+  with SubjectName throws, unencrypted PFX still works (`/p` opt-in),
+  password combined with timestamp URL.
+
 ## [0.1.0] - 2026-05-13
 
 ### Added
