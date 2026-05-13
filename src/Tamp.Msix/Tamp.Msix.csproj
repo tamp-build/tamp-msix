@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <RootNamespace>Tamp.Msix</RootNamespace>
+    <AssemblyName>Tamp.Msix</AssemblyName>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Package">
+    <PackageId>Tamp.Msix</PackageId>
+    <Description>Wrapper for the MSIX packaging toolchain from the Windows SDK: makeappx (pack/unpack) + signtool (sign/verify). Includes AppxManifest.xml version-bump helper so the Identity Version (one of the version-drift surfaces DasBook flagged) is set at build-graph time rather than hand-edited. Pairs with Tamp.Tauri.V2 / Tamp.Cargo to close the Rust-app-to-Microsoft-Store chain.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IsPackable>true</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(TampCorePath)" Condition="'$(TampCoreMode)' == 'project'" />
+    <PackageReference Include="Tamp.Core" Condition="'$(TampCoreMode)' == 'package'" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" />
+  </ItemGroup>
+
+</Project>
