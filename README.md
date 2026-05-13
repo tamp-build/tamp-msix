@@ -122,7 +122,7 @@ class Build : TampBuild
 
 ### What's deferred
 
-**Password-protected PFX support (`/f cert.pfx /p <password>`)** is intentionally NOT typed in 0.1.0. It needs `Tamp.Msix` on `Tamp.Core`'s `InternalsVisibleTo` list to `Reveal()` the password into the command line safely. Filed as **TAM-191** for the 0.2.0 wave when an adopter actually needs to sign with a password-protected PFX. Until then, use one of the unencrypted paths: `/sha1` (store-resident cert), `/n` (subject name), `/a` (auto-select), or unencrypted `/f cert.pfx`. Adopters who need password-protected signing immediately can fall back to `Msix.SignToolRaw(...)` and manage the password on their own env.
+**Password-protected PFX support (`/f cert.pfx /p <password>`)** is not yet typed in 0.1.0. Filed as **TAM-191** for the 0.2.0 wave. (Originally this needed `Tamp.Msix` on `Tamp.Core`'s `InternalsVisibleTo` list; as of Tamp.Core **1.6.0** `Secret.Reveal()` is public and TAMP004-gated, so the IVT requirement is moot — the deferral now is just about the unwritten verb surface, not the access path.) Until 0.2.0 ships, use one of the unencrypted paths: `/sha1` (store-resident cert), `/n` (subject name), `/a` (auto-select), or unencrypted `/f cert.pfx`. Adopters who need password-protected signing immediately can fall back to `Msix.SignToolRaw(...)` and manage the password on their own env.
 
 ## `AppxManifest.xml` version helpers — the load-bearing part
 
