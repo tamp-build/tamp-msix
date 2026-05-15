@@ -56,6 +56,33 @@ public static class Msix
         };
     }
 
+    // ---- Object-init overloads (TAM-161) ----
+    // Parallel surface to the fluent verbs above. Both styles produce identical
+    // CommandPlans; fluent stays canonical in docs and `tamp init` templates.
+    //
+    //     Msix.Pack(makeAppx, new() { Directory = stagingDir, Output = msixPath });
+    //
+    // is equivalent to:
+    //
+    //     Msix.Pack(makeAppx, s => s.SetDirectory(stagingDir).SetOutput(msixPath));
+    public static CommandPlan Pack(Tool makeAppx, MakeAppxPackSettings settings) => PlanMakeAppx(makeAppx, settings);
+    public static CommandPlan Unpack(Tool makeAppx, MakeAppxUnpackSettings settings) => PlanMakeAppx(makeAppx, settings);
+    public static CommandPlan Bundle(Tool makeAppx, MakeAppxBundleSettings settings) => PlanMakeAppx(makeAppx, settings);
+
+    public static CommandPlan Sign(Tool signTool, SignToolSignSettings settings)
+    {
+        if (signTool is null) throw new ArgumentNullException(nameof(signTool));
+        if (settings is null) throw new ArgumentNullException(nameof(settings));
+        return settings.ToCommandPlan(signTool);
+    }
+
+    public static CommandPlan Verify(Tool signTool, SignToolVerifySettings settings)
+    {
+        if (signTool is null) throw new ArgumentNullException(nameof(signTool));
+        if (settings is null) throw new ArgumentNullException(nameof(settings));
+        return settings.ToCommandPlan(signTool);
+    }
+
     private static CommandPlan Run<T>(Tool tool, Action<T> configure) where T : MakeAppxSettingsBase, new()
     {
         if (tool is null) throw new ArgumentNullException(nameof(tool));
@@ -63,6 +90,13 @@ public static class Msix
         var s = new T();
         configure(s);
         return s.ToCommandPlan(tool);
+    }
+
+    private static CommandPlan PlanMakeAppx<T>(Tool tool, T settings) where T : MakeAppxSettingsBase
+    {
+        if (tool is null) throw new ArgumentNullException(nameof(tool));
+        if (settings is null) throw new ArgumentNullException(nameof(settings));
+        return settings.ToCommandPlan(tool);
     }
 
     // ────────────────────────────────────────────────────────────────────────────

@@ -53,9 +53,21 @@ class Build : TampBuild
 
     const string TargetTriple = "x86_64-pc-windows-msvc";
 
+    // ⚠️ .Before(...) is load-bearing: if the Rust build runs first, its
+    //    binaries embed the OLD version (env!("CARGO_PKG_VERSION") resolves
+    //    at compile time), and the MSIX ships a self-inconsistent package.
+    //    Always stamp BEFORE compile.
     Target StampManifestVersion => _ => _
+        .Before(nameof(BuildService), nameof(BuildDesktop))
         .Description("[Pack] Sync AppxManifest.xml Identity/@Version with build version")
-        .Executes(() => Msix.SetAppxManifestVersion(AppxManifest, Version));
+        .Executes(() =>
+        {
+            Msix.SetAppxManifestVersion(AppxManifest, Version);
+            // For Tauri shells: also stamp the Cargo.toml manifests so
+            // env!("CARGO_PKG_VERSION") inside the compiled binary matches.
+            Cargo.SetPackageVersion(ServiceCrate / "Cargo.toml", Version);
+            Cargo.SetPackageVersion(SrcTauri    / "Cargo.toml", Version);
+        });
         // 1.0.6 → 1.0.6.0 automatically; no separate "bump the manifest" step lost in tribal memory.
 
     Target BuildService => _ => _
